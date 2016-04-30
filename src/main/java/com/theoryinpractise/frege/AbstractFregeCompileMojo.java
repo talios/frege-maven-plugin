@@ -46,6 +46,9 @@ public abstract class AbstractFregeCompileMojo extends AbstractMojo {
     @Parameter(defaultValue = "true")
     protected Boolean inline;
 
+    @Parameter(defaultValue = "")
+    protected String target;
+
     @Parameter(defaultValue = "true")
     protected Boolean make;
 
@@ -92,6 +95,11 @@ public abstract class AbstractFregeCompileMojo extends AbstractMojo {
         if (make) {
             cl.addArgument("-make");
         }
+
+        if (target != null && !"".equals(target)) {
+            cl.addArgument("-target").addArgument(target);
+        }
+
         if (verbose) {
             cl.addArgument("-v");
         }
