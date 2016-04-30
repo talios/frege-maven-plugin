@@ -34,153 +34,167 @@ import java.util.Set;
 
 public abstract class AbstractFregeCompileMojo extends AbstractMojo {
 
-    @Parameter(required = true, readonly = true, property = "project")
-    protected MavenProject project;
+  @Parameter(required = true, readonly = true, property = "project")
+  protected MavenProject project;
 
-    @Parameter(defaultValue = "false")
-    protected Boolean hints;
+  @Parameter(defaultValue = "false")
+  protected Boolean hints;
 
-    @Parameter(defaultValue = "false")
-    protected Boolean verbose;
+  @Parameter(defaultValue = "false")
+  protected Boolean verbose;
 
-    @Parameter(defaultValue = "true")
-    protected Boolean inline;
+  @Parameter(defaultValue = "true")
+  protected Boolean inline;
 
-    @Parameter(defaultValue = "true")
-    protected Boolean make;
+  @Parameter(defaultValue = "")
+  protected String target;
 
-    @Parameter(defaultValue = "false")
-    protected Boolean skipCompile;
+  @Parameter(defaultValue = "true")
+  protected Boolean make;
 
-    @Parameter(defaultValue = "false")
-    protected boolean includeStale;
+  @Parameter(defaultValue = "false")
+  protected Boolean skipCompile;
 
-    @Override
-    public void execute() throws MojoExecutionException, MojoFailureException {
+  @Parameter(defaultValue = "false")
+  protected boolean includeStale;
 
-        try {
-            File outputDir = getOutputDirectory().getCanonicalFile();
-            if (!outputDir.exists()) {
-                Files.createDirectories(outputDir.toPath());
-            }
-        } catch (IOException e) {
-            throw new MojoFailureException(e.getMessage(), e);
-        }
+  @Override
+  public void execute() throws MojoExecutionException, MojoFailureException {
 
-        CommandLine cl = new CommandLine("java");
-
-        String cp = "";
-        for (Object classpathElement : getClassPathElements()) {
-            cp = cp + File.pathSeparator + classpathElement;
-        }
-        cp = cp + File.pathSeparator + getOutputDirectory().getAbsolutePath();
-
-        cl.addArgument("-cp").addArgument(cp);
-
-        cl.addArgument("frege.compiler.Main");
-        cl.addArgument("-sp").addArgument(getSourcePath());
-
-        // output dir
-        cl.addArgument("-d").addArgument(getOutputDirectory().getAbsolutePath());
-
-        if (hints) {
-            cl.addArgument("-hints");
-        }
-        if (inline) {
-            cl.addArgument("-inline");
-        }
-        if (make) {
-            cl.addArgument("-make");
-        }
-        if (verbose) {
-            cl.addArgument("-v");
-        }
-        if (skipCompile) {
-            cl.addArgument("-j");
-        }
-
-        // source files
-        final Set<File> sourceFiles = getSourceFiles();
-
-        if (sourceFiles.isEmpty()) {
-            getLog().info("No files to compile, skipping...");
-        } else {
-
-            for (File sourceFile : sourceFiles) {
-                cl.addArgument(sourceFile.getAbsolutePath());
-            }
-
-            getLog().debug("Command line: " + cl.toString());
-
-            Executor exec = new DefaultExecutor();
-            Map<String, String> env = new HashMap<>(System.getenv());
-            ExecuteStreamHandler handler = new PumpStreamHandler(System.out, System.err, System.in);
-            exec.setStreamHandler(handler);
-
-            int status;
-            try {
-                status = exec.execute(cl, env);
-            } catch (ExecuteException e) {
-                status = e.getExitValue();
-            } catch (IOException e) {
-                status = 1;
-            }
-
-            if (status != 0) {
-                throw new MojoExecutionException("Frege compilation failed.");
-            }
-        }
-
+    try {
+      File outputDir = getOutputDirectory().getCanonicalFile();
+      if (!outputDir.exists()) {
+        Files.createDirectories(outputDir.toPath());
+      }
+    } catch (IOException e) {
+      throw new MojoFailureException(e.getMessage(), e);
     }
 
-    private String getSourcePath() {
-        List<File> sourceDirectories = getAllSourceDirectories();
+    CommandLine cl = new CommandLine("java");
 
-        String sourcePath = FluentIterable.from(sourceDirectories).transform(new Function<File, String>() {
-            @Override
-            public String apply(File input) {
-                return input.getAbsolutePath();
-            }
-        }).join(Joiner.on(File.pathSeparator));
+    String cp = "";
+    for (Object classpathElement : getClassPathElements()) {
+      cp = cp + File.pathSeparator + classpathElement;
+    }
+    cp = cp + File.pathSeparator + getOutputDirectory().getAbsolutePath();
 
-        return sourcePath;
+    cl.addArgument("-cp").addArgument(cp);
+
+    cl.addArgument("frege.compiler.Main");
+    cl.addArgument("-sp").addArgument(getSourcePath());
+
+    // output dir
+    cl.addArgument("-d").addArgument(getOutputDirectory().getAbsolutePath());
+
+    if (hints) {
+      cl.addArgument("-hints");
+    }
+    if (inline) {
+      cl.addArgument("-inline");
+    }
+    if (make) {
+      cl.addArgument("-make");
     }
 
-    public abstract List<File> getAllSourceDirectories();
-
-    protected Set<File> discoverSourceFiles(List<File> allSourceDirectories) throws MojoExecutionException {
-
-        if (allSourceDirectories.isEmpty()) return Collections.EMPTY_SET;
-
-        SourceInclusionScanner scanner = getSourceInclusionScanner(includeStale);
-
-        SourceMapping mapping = new SuffixMapping(".fr", new HashSet(Arrays.asList(".java")));
-
-        scanner.addSourceMapping(mapping);
-
-        final Set<File> sourceFiles = new HashSet<>();
-        for (File file : getAllSourceDirectories()) {
-            try {
-                sourceFiles.addAll(scanner.getIncludedSources(file, getOutputDirectory()));
-            } catch (InclusionScanException e) {
-                throw new MojoExecutionException("Error scanning source path: \'" + file.getPath() + "\' " + "for  files to recompile.", e);
-            }
-        }
-
-        return sourceFiles;
+    if (target != null && !"".equals(target)) {
+      cl.addArgument("-target").addArgument(target);
     }
 
-    protected SourceInclusionScanner getSourceInclusionScanner(boolean includeStale) {
-        return includeStale
-                ? new SimpleSourceInclusionScanner(Collections.singleton("**/*"), Collections.EMPTY_SET)
-                : new StaleSourceScanner(1024);
+    if (verbose) {
+      cl.addArgument("-v");
+    }
+    if (skipCompile) {
+      cl.addArgument("-j");
     }
 
-    public Set<File> getSourceFiles() throws MojoExecutionException {
-        return discoverSourceFiles(getAllSourceDirectories());
+    // source files
+    final Set<File> sourceFiles = getSourceFiles();
+
+    if (sourceFiles.isEmpty()) {
+      getLog().info("No files to compile, skipping...");
+    } else {
+
+      for (File sourceFile : sourceFiles) {
+        cl.addArgument(sourceFile.getAbsolutePath());
+      }
+
+      getLog().debug("Command line: " + cl.toString());
+
+      Executor exec = new DefaultExecutor();
+      Map<String, String> env = new HashMap<>(System.getenv());
+      ExecuteStreamHandler handler = new PumpStreamHandler(System.out, System.err, System.in);
+      exec.setStreamHandler(handler);
+
+      int status;
+      try {
+        status = exec.execute(cl, env);
+      } catch (ExecuteException e) {
+        status = e.getExitValue();
+      } catch (IOException e) {
+        status = 1;
+      }
+
+      if (status != 0) {
+        throw new MojoExecutionException("Frege compilation failed.");
+      }
+    }
+  }
+
+  private String getSourcePath() {
+    List<File> sourceDirectories = getAllSourceDirectories();
+
+    String sourcePath =
+        FluentIterable.from(sourceDirectories)
+            .transform(
+                new Function<File, String>() {
+                  @Override
+                  public String apply(File input) {
+                    return input.getAbsolutePath();
+                  }
+                })
+            .join(Joiner.on(File.pathSeparator));
+
+    return sourcePath;
+  }
+
+  public abstract List<File> getAllSourceDirectories();
+
+  protected Set<File> discoverSourceFiles(List<File> allSourceDirectories)
+      throws MojoExecutionException {
+
+    if (allSourceDirectories.isEmpty()) return Collections.EMPTY_SET;
+
+    SourceInclusionScanner scanner = getSourceInclusionScanner(includeStale);
+
+    SourceMapping mapping = new SuffixMapping(".fr", new HashSet(Arrays.asList(".java")));
+
+    scanner.addSourceMapping(mapping);
+
+    final Set<File> sourceFiles = new HashSet<>();
+    for (File file : getAllSourceDirectories()) {
+      try {
+        sourceFiles.addAll(scanner.getIncludedSources(file, getOutputDirectory()));
+      } catch (InclusionScanException e) {
+        throw new MojoExecutionException(
+            "Error scanning source path: \'" + file.getPath() + "\' " + "for  files to recompile.",
+            e);
+      }
     }
 
-    public abstract File getOutputDirectory();
+    return sourceFiles;
+  }
 
-    public abstract List<String> getClassPathElements();
+  protected SourceInclusionScanner getSourceInclusionScanner(boolean includeStale) {
+    return includeStale
+        ? new SimpleSourceInclusionScanner(Collections.singleton("**/*"), Collections.EMPTY_SET)
+        : new StaleSourceScanner(1024);
+  }
+
+  public Set<File> getSourceFiles() throws MojoExecutionException {
+    return discoverSourceFiles(getAllSourceDirectories());
+  }
+
+  public abstract File getOutputDirectory();
+
+  public abstract List<String> getClassPathElements();
 }
